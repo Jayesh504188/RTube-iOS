@@ -66,6 +66,16 @@ workflows:
         script: |
           npm install
 
+      - name: Restore binary assets
+        script: |
+          # NOTE: the GitHub MCP API stores files as text, so the 3 PNGs were
+          # committed base64-encoded. Decode them back to real PNG bytes here
+          # (before expo prebuild reads them). macOS base64 supports -d.
+          for f in assets/icon.png assets/splash.png assets/adaptive-icon.png; do
+            base64 -d "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+          done
+          file assets/icon.png assets/splash.png assets/adaptive-icon.png
+
       - name: Generate native iOS project
         script: |
           # Regenerates ios/ from app.json + modules/ (not committed to git).
