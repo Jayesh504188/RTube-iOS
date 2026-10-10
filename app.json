@@ -42,6 +42,7 @@
     "name": "RTube",
     "orientation": "portrait",
     "plugins": [
+      "./plugins/withFmtFix",
       "expo-splash-screen",
       "expo-av",
       [
