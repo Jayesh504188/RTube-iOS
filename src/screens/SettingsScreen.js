@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Notifications from 'expo-notifications';
 import { useTheme } from '../theme';
 import { useSettings } from '../settings';
 import { useHistory } from '../history';
@@ -123,22 +122,6 @@ export default function SettingsScreen() {
     );
   };
 
-  const toggleNotifications = async (value) => {
-    if (value) {
-      try {
-        const { status } = await Notifications.requestPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert(
-            'Notifications',
-            'Permission denied. Enable notifications in iOS Settings to get download alerts.'
-          );
-          return;
-        }
-      } catch (e) {}
-    }
-    setPref('notifications', value);
-  };
-
   const contactUs = () => {
     Linking.openURL(
       `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('RTube Inquiry')}`
@@ -225,11 +208,6 @@ export default function SettingsScreen() {
 
       <Section title="GENERAL">
         <Row icon="language-outline" label="Language" value="English" />
-        <Row
-          icon="notifications-outline"
-          label="Notifications"
-          right={sw(prefs.notifications, toggleNotifications)}
-        />
       </Section>
 
       <Section title="ABOUT">

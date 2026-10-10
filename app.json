@@ -44,7 +44,6 @@
     "plugins": [
       "expo-splash-screen",
       "expo-av",
-      "expo-notifications",
       [
         "expo-build-properties",
         {

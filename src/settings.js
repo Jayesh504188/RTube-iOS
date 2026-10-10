@@ -8,7 +8,6 @@ export const DEFAULTS = {
   quality: 'wifi', // wifi | mobile
   blockAds: true,
   backgroundPlay: true,
-  notifications: false,
   language: 'English',
 };
 

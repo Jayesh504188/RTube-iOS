@@ -10,7 +10,6 @@ import { WebView } from 'react-native-webview';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system';
-import * as Notifications from 'expo-notifications';
 import { registerBrowserWebView } from '../sleeptimer';
 import { useSettings } from '../settings';
 import { useTheme } from '../theme';
@@ -27,14 +26,6 @@ import {
   DOWNLOADS_DIR,
   safeFileName,
 } from '../downloads';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
 
 // Best-effort data saver: YouTube honors the vq parameter on watch pages.
 function applyQuality(url, quality) {
@@ -153,14 +144,6 @@ export default function BrowserScreen() {
       await ensureDownloadsDir();
       const name = safeFileName(msg.title || 'video') + '.mp4';
       await FileSystem.downloadAsync(msg.src, DOWNLOADS_DIR + name);
-      if (prefs.notifications) {
-        try {
-          await Notifications.scheduleNotificationAsync({
-            content: { title: 'Download complete', body: name },
-            trigger: null,
-          });
-        } catch (e) {}
-      }
       Alert.alert('Download complete', `${name} saved to Downloads.`);
     } catch (e) {
       Alert.alert(
