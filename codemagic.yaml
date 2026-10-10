@@ -126,7 +126,7 @@ workflows:
 
       - name: Set code signing on Xcode project
         script: |
-          xcode-project use-profiles --workspace "ios/RTube.xcworkspace"
+          xcode-project use-profiles --project "ios/RTube.xcodeproj"
 
       - name: Auto-increment build number
         script: |
