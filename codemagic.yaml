@@ -45,7 +45,9 @@ workflows:
         # defined in Codemagic -> App settings -> Environment variables.
         # NOTE: do NOT re-declare them under `vars:` here - values like
         # `BUNDLE_ID: $BUNDLE_ID` are taken literally and break the build.
-        - app_store_credentials
+        # NOTE 2: RTube uses its OWN group (rtube_credentials), separate from
+        # the PTUBE app's app_store_credentials group (different BUNDLE_ID).
+        - rtube_credentials
       node: 20
       xcode: latest
       cocoapods: default
