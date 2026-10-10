@@ -72,11 +72,30 @@ workflows:
         script: |
           # NOTE: the GitHub MCP API stores files as text, so the 3 PNGs were
           # committed base64-encoded. Decode them back to real PNG bytes here
-          # (before expo prebuild reads them). macOS base64 supports -d.
-          for f in assets/icon.png assets/splash.png assets/adaptive-icon.png; do
-            base64 -d "$f" > "$f.tmp" && mv "$f.tmp" "$f"
-          done
-          file assets/icon.png assets/splash.png assets/adaptive-icon.png
+          # (before expo prebuild reads them). Python is used instead of the
+          # `base64` CLI for deterministic cross-platform decoding, and the
+          # PNG magic bytes are verified so a bad decode fails LOUDLY here
+          # instead of surfacing as a cryptic Jimp error inside prebuild.
+          python3 << 'PYEOF'
+          import base64, pathlib, sys
+          ok = True
+          for f in ['assets/icon.png', 'assets/splash.png', 'assets/adaptive-icon.png']:
+              p = pathlib.Path(f)
+              try:
+                  data = base64.b64decode(p.read_text())
+              except Exception as e:
+                  print(f"ERROR decoding {f}: {e}")
+                  ok = False
+                  continue
+              if data[:8] != b'\x89PNG\r\n\x1a\n':
+                  print(f"ERROR {f}: decoded bytes are not a PNG "
+                        f"(first bytes: {data[:8]!r})")
+                  ok = False
+                  continue
+              p.write_bytes(data)
+              print(f"OK {f}: {len(data)} bytes, valid PNG")
+          sys.exit(0 if ok else 1)
+          PYEOF
 
       - name: Generate native iOS project
         script: |
