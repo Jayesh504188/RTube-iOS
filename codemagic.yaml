@@ -1,0 +1,131 @@
+# Codemagic CI - build the RTube iOS app (React Native + Expo) in the cloud.
+# No Mac required.
+#
+# How it works:
+#   1. Push this repo to GitHub and connect it to Codemagic.
+#   2. Add the environment variables below in Codemagic
+#      (App settings -> Environment variables), marked as Secure where noted.
+#      You can REUSE the same `app_store_credentials` group you already use
+#      for the PTUBE app - the variable names are identical.
+#   3. Trigger the workflow - Codemagic installs node modules, runs
+#      `expo prebuild` to generate the native iOS project on the cloud Mac,
+#      builds the release .ipa and publishes it straight to App Store Connect.
+#
+# Required environment variables (placeholders only - NEVER hardcode secrets):
+#   BUNDLE_ID                        com.jayesh504188.rtube (must match
+#                                    app.json -> expo.ios.bundleIdentifier)
+#   APP_STORE_ID                     numeric App Store ID from App Store Connect
+#                                    (for build-number lookup)
+#   APP_STORE_CONNECT_ISSUER_ID      from your App Store Connect API key (Secure)
+#   APP_STORE_CONNECT_KEY_IDENTIFIER Key ID of the API key (Secure)
+#   APP_STORE_CONNECT_PRIVATE_KEY    contents of the downloaded .p8 file (Secure)
+#   CERTIFICATE_PRIVATE_KEY          RSA private key used to create the Apple
+#                                    Distribution certificate (Secure). REQUIRED
+#                                    for the first build: Apple never shares a
+#                                    certificate's private key, so Codemagic must
+#                                    create the certificate from a key you provide.
+#                                    Generate once with:
+#                                      openssl genrsa -traditional 2048
+#                                    and paste the full PEM (BEGIN/END RSA PRIVATE
+#                                    KEY lines included). Reused on later builds.
+#
+# Notes:
+#   - The native ios/ folder is NOT committed (see .gitignore); `expo prebuild`
+#     regenerates it on every build from app.json + modules/.
+#   - The Xcode scheme is always "RTube" (generated from app.json name).
+
+workflows:
+  ios-app-store:
+    name: RTube iOS Release
+    instance_type: mac_mini_m2
+    max_build_duration: 120
+    environment:
+      groups:
+        # All variables (BUNDLE_ID, API key, secrets) come from this group,
+        # defined in Codemagic -> App settings -> Environment variables.
+        # NOTE: do NOT re-declare them under `vars:` here - values like
+        # `BUNDLE_ID: $BUNDLE_ID` are taken literally and break the build.
+        - app_store_credentials
+      node: 20
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Verify required variables
+        script: |
+          if [ -z "$BUNDLE_ID" ] || [[ "$BUNDLE_ID" == *\$* ]]; then
+            echo "ERROR: BUNDLE_ID is empty or unexpanded: '$BUNDLE_ID'"
+            echo "Check the app_store_credentials group in Codemagic."
+            exit 1
+          fi
+          if [ "$BUNDLE_ID" != "com.jayesh504188.rtube" ]; then
+            echo "WARNING: BUNDLE_ID ($BUNDLE_ID) does not match app.json (com.jayesh504188.rtube)"
+          fi
+          echo "BUNDLE_ID=$BUNDLE_ID"
+
+      - name: Install dependencies
+        script: |
+          npm install
+
+      - name: Generate native iOS project
+        script: |
+          # Regenerates ios/ from app.json + modules/ (not committed to git).
+          CI=1 npx expo prebuild --platform ios --clean
+
+      - name: Install CocoaPods
+        script: |
+          cd ios && pod install
+
+      - name: Set up keychain
+        script: |
+          keychain initialize
+
+      - name: Fetch signing files from Apple
+        script: |
+          # Creates (if needed) and downloads the App Store distribution
+          # certificate + provisioning profile for $BUNDLE_ID using the
+          # App Store Connect API key from the environment.
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key @env:CERTIFICATE_PRIVATE_KEY \
+            --create
+
+      - name: Add certificates to keychain
+        script: |
+          keychain add-certificates
+
+      - name: Set code signing on Xcode project
+        script: |
+          xcode-project use-profiles --workspace "ios/RTube.xcworkspace"
+
+      - name: Auto-increment build number
+        script: |
+          # Latest build number on App Store Connect + 1.
+          # Falls back to the git commit count if the lookup fails
+          # (e.g. very first upload).
+          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_ID" 2>/dev/null || echo 0)
+          if [ -z "$LATEST" ] || [ "$LATEST" = "0" ]; then
+            LATEST=$(git rev-list --count HEAD)
+          fi
+          NEW_BUILD_NUMBER=$((LATEST + 1))
+          echo "Setting build number to $NEW_BUILD_NUMBER"
+          cd ios && xcrun agvtool new-version -all "$NEW_BUILD_NUMBER"
+
+      - name: Build release IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace "ios/RTube.xcworkspace" \
+            --scheme "RTube"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        # Uploads the .ipa to App Store Connect and puts it on TestFlight.
+        # Flip submit_to_app_store to true when you want it to go to App Review.
+        submit_to_testflight: true
+        submit_to_app_store: false
